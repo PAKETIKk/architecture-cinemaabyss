@@ -82,4 +82,111 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Extract metadata (tags, labels) for Events Service
+        id: meta-events
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.EVENTS_SERVICE_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=branch
+            latest
+
+      - name: Build and push Events Service Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/microservices/events
+          push: true
+          tags: ${{ steps.meta-events.outputs.tags }}
+          labels: ${{ steps.meta-events.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract metadata (tags, labels) for Proxy Service
+        id: meta-proxy
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.PROXY_SERVICE_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=ref,event=branch
+            latest
+
+      - name: Build and push Proxy Service Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/microservices/proxy
+          push: true
+          tags: ${{ steps.meta-proxy.outputs.tags }}
+          labels: ${{ steps.meta-proxy.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       
+  api-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/postman/package-lock.json
+
+      - name: Install test dependencies
+        working-directory: tests/postman
+        run: npm ci
+
+      - name: Start services
+        run: docker compose up -d --build
+
+      - name: Wait for API readiness
+        shell: bash
+        run: |
+          for url in \
+            http://localhost:8080/health \
+            http://localhost:8081/api/movies/health \
+            http://localhost:8082/api/events/health \
+            http://localhost:8000/health
+          do
+            ready=false
+            for attempt in {1..60}; do
+              if curl --fail --silent --max-time 3 "$url" > /dev/null; then
+                ready=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$ready" != true ]; then
+              echo "Service not ready: $url"
+              exit 1
+            fi
+          done
+      
+      - name: Run Postman tests
+        working-directory: tests/postman
+        run: npm run test:local -- --reporters cli,junit
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-test-reports
+          path: tests/postman/reports/
+          if-no-files-found: ignore
+
+      - name: Stop services
+        if: always()
+        run: docker compose down
