@@ -1,0 +1,86 @@
+@startuml 
+title TO BE контейнерная диаграмма сервиса «Кинобездна»
+!include ./uml-lib/C4_Container.puml 
+' Пользователи
+Person(user, "Пользователь", "")
+' Система
+Container_Boundary(system, "«Кинобездна»") {
+    ' Пользователь <-> система
+    Container(WebApp, "Веб приложение", "React, TypeScript", "Управляет взаимодействием с пользователем")
+    Container(MobileApp, "Мобильное приложение", "Kotlin, Swift", "Управляет взаимодействием с пользователем")
+    Container(TVApp, "Приложение для теливизоров", "", "Управляет взаимодействием с пользователем")
+    Container(ApiGateway, "ApiGateway", "Kong", "Маршрутизирует запросы")
+    ' Управление метаданными
+    Container(MetaDataService, "Meta Data Service", "", "Управляет метаданными")
+    ContainerDb(MetaDataDatabase, "MetaData\nDatabase", "NoSQL", "Хранит\nметаданные")
+    MetaDataService .right.> MetaDataDatabase
+    ' Управление пользователями
+    Container(UserService, "User Service", "Go", "Реализует функциональность управления пользователями")
+    ContainerDb(UserDatabase, "User\nDatabase", "PostgreSQL", "Хранит данные\nпользователей")
+    UserService .right.> UserDatabase
+    ' Управление подписками
+    Container(SubscriptionService, "Subscription Service", "", "Управляет подписками")
+    ContainerDb(SubscriptionDatabase, "Subscription\nDatabase", "NoSQL", "Хранит данные\nподписками")
+    SubscriptionService .right.> SubscriptionDatabase
+    ' Управленеи маркетинговой системой
+    Container(MarketingService, "Marketing Service", "", "Управляет маркетингом\n(скидки, система лояльности)")
+    ContainerDb(MarketingDatabase, "Marketing\nDatabase", "NoSQL", "Хранит данные\nсистемы\nмаркетинга")
+    MarketingService .right.> MarketingDatabase
+    ' Управление рекомендациями
+    Container(RecommendationService, "Recommendation Service", "", "Управляет рекомендациями")
+    ContainerDb(RecommendationDatabase, "Recommendation\nDatabase", "NoSQL", "Хранит данные\nсистемы\nрекомендаций")
+    RecommendationService .right.> RecommendationDatabase
+    ' Управление видео
+    Container(VideoService, "Video Service", "", "Управляет видео")
+    ContainerDb(VideoDatabase, "Video\nDatabase", "S3", "Хранит данные\nвидео")
+    VideoService .right.> VideoDatabase
+    ' Управление платежами
+    Container(PaymentService, "Payment Service", "", "Управляет платежами")
+    ContainerDb(PaymentDatabase, "Payment\nDatabase", "NoSQL", "Хранит данные\nплатежей")
+    PaymentService .right.> PaymentDatabase
+    ' Интеграционный шлюз
+    Container(IntegrationService, "Integration Service", "", "Отвечает за интеграции с внешними системами")
+    ' Брокеры сообщений
+    Container(Kafka, "Apache Kafka", "Kafka", "Обеспечивает обмен сообщениями между сервисами приложения")
+    ' Связи
+    WebApp ..> ApiGateway : "Отправляет\nзапросы"
+    MobileApp ..> ApiGateway : "Отправляет\nзапросы"
+    TVApp ..> ApiGateway : "Отправляет\nзапросы"
+
+    ApiGateway ..> MetaDataService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> UserService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> PaymentService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> VideoService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> RecommendationService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> SubscriptionService : "Маршрутизирует\nзапросы"
+    ApiGateway ..> MarketingService : "Маршрутизирует\nзапросы"
+    
+    MetaDataService <.down.> Kafka : Публикует/получает\nсобытия
+    UserService <.> Kafka : Публикует/получает\nсобытия
+    PaymentService <.> Kafka : Публикует/получает\nсобытия
+    VideoService <.> Kafka : Публикует/получает\nсобытия
+    SubscriptionService <.> Kafka : Публикует/получает\nсобытия
+    MarketingService <.> Kafka : Публикует/получает\nсобытия
+    RecommendationService <.> Kafka : Публикует/получает\nсобытия
+
+    Kafka <.down.> IntegrationService : Публикует/получает\nсобытия
+}
+' Внешние системы
+System_Ext(recommendationSystem, "Внешняя рекомендательная система", "")
+System_Ext(cinemaSystem, "Онлайн-кинотеатры", "")
+System_Ext(paymentSystem, "Платёжная система", "")
+System_Ext(S3, "S3", "")
+' Связи
+user ..> WebApp : Использует
+user ..> MobileApp : Использует
+user ..> TVApp : Использует
+
+VideoService .down.> cinemaSystem : "Получает видеоконтент"
+VideoService .down.> S3 : "Получает видеоконтент"
+IntegrationService .down.> recommendationSystem : "Отправляет\nзапросы"
+IntegrationService .down.> paymentSystem : "Отправляет\nзапросы"
+IntegrationService .down.> cinemaSystem : "Отправляет\nзапросы"
+' Подсказка для рендера
+Kafka .[hidden]down. paymentSystem
+Kafka .[hidden]down. cinemaSystem
+@enduml
